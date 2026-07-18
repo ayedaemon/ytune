@@ -1,0 +1,7 @@
+asyncpg
+librosa
+soundfile
+numpy
+pydantic-settings
+structlog
+tenacity

@@ -1,0 +1,2 @@
+ALTER TABLE local_mert DROP COLUMN IF EXISTS embedding;
+ALTER TABLE local_mert ADD COLUMN IF NOT EXISTS embedding JSONB;

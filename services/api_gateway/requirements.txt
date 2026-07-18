@@ -1,0 +1,7 @@
+asyncpg
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+structlog
+tenacity

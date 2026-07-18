@@ -1,0 +1,5 @@
+asyncpg
+ytmusicapi
+pydantic-settings
+structlog
+tenacity

@@ -1,0 +1,9 @@
+asyncpg
+laion-clap
+torch
+torchaudio
+torchvision
+soundfile
+pydantic-settings
+structlog
+tenacity

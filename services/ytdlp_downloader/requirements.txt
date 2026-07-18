@@ -1,0 +1,5 @@
+asyncpg
+yt-dlp
+pydantic-settings
+structlog
+tenacity

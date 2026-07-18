@@ -1,0 +1,11 @@
+asyncpg
+transformers
+torch
+torchaudio
+librosa
+soundfile
+huggingface_hub
+accelerate
+pydantic-settings
+structlog
+tenacity

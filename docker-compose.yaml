@@ -1,0 +1,167 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ytmusic
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ytmusic_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ytmusic -d ytmusic_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  ytm-sync:
+    build:
+      context: .
+      dockerfile: services/ytm_sync/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://ytmusic:password@db:5432/ytmusic_db
+      YTM_AUTH_FILE: /app/auth/ytmusic.json
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./auth:/app/auth:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  ytdlp-downloader:
+    build:
+      context: .
+      dockerfile: services/ytdlp_downloader/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://ytmusic:password@db:5432/ytmusic_db
+      STORAGE_ROOT: /storage
+      YTM_COOKIES_FILE: /app/auth/cookies.txt
+      # Unset by default — DownloaderSettings sizes this to the memory/cpus limits
+      # below on its own (core/resources.py). Set MAX_CONCURRENT_DOWNLOADS to override.
+      MAX_CONCURRENT_DOWNLOADS: ${MAX_CONCURRENT_DOWNLOADS:-}
+      AUDIO_FORMAT: ${AUDIO_FORMAT:-mp3}
+      DOWNLOAD_OUTTMPL: ${DOWNLOAD_OUTTMPL:-%(id)s.%(ext)s}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./auth:/app/auth:ro
+      - ./downloads:/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      # Each replica gets its own 512M/1cpu allotment and independently computes
+      # max_concurrent_downloads=1 from it (core/resources.py) — N replicas = N safe
+      # concurrent downloads, instead of raising one container's concurrency past
+      # what its own memory limit can take (that's what caused the earlier OOM).
+      replicas: 3
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  enrich-librosa:
+    build:
+      context: .
+      dockerfile: services/enrich_librosa/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://ytmusic:password@db:5432/ytmusic_db
+      # Unset by default — LibrosaSettings sizes this to the memory/cpus limits
+      # below on its own (core/resources.py). Set LIBROSA_MAX_CONCURRENT_WORKERS to override.
+      MAX_CONCURRENT_WORKERS: ${LIBROSA_MAX_CONCURRENT_WORKERS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./downloads:/storage:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  embeddings-clap:
+    build:
+      context: .
+      dockerfile: services/embeddings_clap/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://ytmusic:password@db:5432/ytmusic_db
+      DEVICE: ${DEVICE:-cpu}
+      # Model isn't safe for concurrent inference on CPU — keep at 1 unless you set
+      # DEVICE=cuda and CLAP_MAX_CONCURRENT_WORKERS explicitly.
+      MAX_CONCURRENT_WORKERS: ${CLAP_MAX_CONCURRENT_WORKERS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./downloads:/storage:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+
+  embeddings-mert:
+    build:
+      context: .
+      dockerfile: services/embeddings_mert/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://ytmusic:password@db:5432/ytmusic_db
+      DEVICE: ${DEVICE:-cpu}
+      MAX_CONCURRENT_WORKERS: ${MERT_MAX_CONCURRENT_WORKERS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./downloads:/storage:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api_gateway/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://ytmusic:password@db:5432/ytmusic_db
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DB_MAX_POOL_SIZE: ${DB_MAX_POOL_SIZE:-10}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+volumes:
+  pgdata:

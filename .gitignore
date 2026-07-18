@@ -1,0 +1,30 @@
+# Secrets & runtime data — never commit
+auth/
+downloads/
+.env
+.op.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.pytest_cache/
+
+# Exported specs
+openapi.json
+
+# Editor / IDE
+.claude/
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs / temp
+*.log
+*.tmp
+tmp/
